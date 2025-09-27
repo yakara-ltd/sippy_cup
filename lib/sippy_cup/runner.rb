@@ -71,6 +71,12 @@ module SippyCup
       exit_status = Process.wait2 @sipp_pid.to_i
       @err_rd.close if @err_rd
       @stdout_rd.close if @stdout_rd
+
+      # Log stderr output for debugging (only if logger responds to debug)
+      if @stderr_buffer && !@stderr_buffer.empty? && @logger.respond_to?(:debug)
+        @logger.debug "SIPp stderr output: #{@stderr_buffer}"
+      end
+
       final_result = process_exit_status exit_status, @stderr_buffer
       if final_result
         @logger.info "Test completed successfully!"
@@ -194,11 +200,20 @@ module SippyCup
         raise SippyCup::ExitOnInternalCommand, error_message
       when 99
         raise SippyCup::NoCallsProcessed, error_message
-      when 255
+      when 255, -1
         raise SippyCup::FatalError, error_message
-      when 254
+      when 254, -2
         raise SippyCup::FatalSocketBindingError, error_message
+      when 2
+        # SIPp exit code 2: error resolving hostname or connection refused
+        enhanced_message = "SIPp failed to connect to target (exit code 2). Check hostname resolution and target availability. #{error_message}"
+        raise SippyCup::SippGenericError, enhanced_message
+      when 3
+        # SIPp exit code 3: target not responding
+        enhanced_message = "SIPp target not responding (exit code 3). Check if target service is running and accessible. #{error_message}"
+        raise SippyCup::SippGenericError, enhanced_message
       else
+        # Keep backwards compatibility - only enhance for specific networking issues
         raise SippyCup::SippGenericError, error_message
       end
     end
