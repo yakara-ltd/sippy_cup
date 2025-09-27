@@ -69,6 +69,11 @@ module SippyCup
     #
     def wait
       exit_status = Process.wait2 @sipp_pid.to_i
+
+      # Wait for threads to finish reading before closing streams
+      @stderr_thread.join if @stderr_thread
+      @stdout_thread.join if @stdout_thread
+
       @err_rd.close if @err_rd
       @stdout_rd.close if @stdout_rd
 
@@ -166,24 +171,32 @@ module SippyCup
 
       @stderr_buffer = String.new
 
-      Thread.new do
+      @stderr_thread = Thread.new do
         err_wr.close
-        until @err_rd.eof?
-          buffer = @err_rd.readpartial(1024).strip
-          @stderr_buffer += buffer
-          $stderr << buffer if @options[:full_sipp_output]
+        begin
+          until @err_rd.eof?
+            buffer = @err_rd.readpartial(1024).strip
+            @stderr_buffer += buffer
+            $stderr << buffer if @options[:full_sipp_output]
+          end
+        rescue IOError
+          # Stream was closed, thread can exit
         end
       end
 
       if @stdout_rd
         @stdout_buffer = String.new
 
-        Thread.new do
+        @stdout_thread = Thread.new do
           stdout_wr.close
-          until @stdout_rd.eof?
-            buffer = @stdout_rd.readpartial(1024).strip
-            @stdout_buffer += buffer
-            $stdout << buffer
+          begin
+            until @stdout_rd.eof?
+              buffer = @stdout_rd.readpartial(1024).strip
+              @stdout_buffer += buffer
+              $stdout << buffer
+            end
+          rescue IOError
+            # Stream was closed, thread can exit
           end
         end
       end
