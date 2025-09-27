@@ -18,13 +18,13 @@ Gem::Specification.new do |s|
   s.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
   s.require_paths = ["lib"]
 
-  s.add_runtime_dependency 'packetfu', [">= 1.1.13"]
-  s.add_runtime_dependency 'nokogiri', ["~> 1.10.4"]
+  s.add_runtime_dependency 'packetfu', [">= 1.1.13", "< 3.0"]
+  s.add_runtime_dependency 'nokogiri', [">= 1.15.0"]
   s.add_runtime_dependency 'activesupport', [">= 3.0"]
-  s.add_runtime_dependency 'psych', ["~> 2.0.1"] unless RUBY_PLATFORM == 'java'
+  s.add_runtime_dependency 'psych', [">= 3.0"] unless RUBY_PLATFORM == 'java'
 
   s.add_development_dependency 'guard-rspec'
-  s.add_development_dependency 'rspec', ["~> 3.4"]
+  s.add_development_dependency 'rspec', ["~> 3.13"]
   s.add_development_dependency 'simplecov'
   s.add_development_dependency 'simplecov-rcov'
   s.add_development_dependency 'fakefs'
