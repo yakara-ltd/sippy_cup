@@ -37,6 +37,7 @@ module SippyCup
       @input_files = @scenario.to_tmpfiles
 
       @logger.info "Preparing to run SIPp command: #{command}"
+      @logger.info "SIPp scenario options: #{@scenario_options.inspect}" if @logger.respond_to?(:debug)
 
       execute_with_redirected_streams
 
@@ -81,6 +82,9 @@ module SippyCup
       if @stderr_buffer && !@stderr_buffer.empty? && @logger.respond_to?(:debug)
         @logger.debug "SIPp stderr output: #{@stderr_buffer}"
       end
+
+      # Analyze output for communication issues
+      analyze_sipp_output
 
       final_result = process_exit_status exit_status, @stderr_buffer
       if final_result
@@ -228,6 +232,56 @@ module SippyCup
       else
         # Keep backwards compatibility - only enhance for specific networking issues
         raise SippyCup::SippGenericError, error_message
+      end
+    end
+
+    def analyze_sipp_output
+      return unless @logger.respond_to?(:warn) && @logger.respond_to?(:info)
+
+      stderr_output = @stderr_buffer || ""
+      stdout_output = @stdout_buffer || ""
+      combined_output = stderr_output + stdout_output
+
+      # Check for common SIP communication issues
+      if combined_output.include?("Resolving remote host") && combined_output.include?("Done")
+        @logger.info "SIPp successfully resolved hostname"
+      end
+
+      if combined_output.include?("No message received") || combined_output.include?("timeout")
+        @logger.warn "SIPp indicates no response from SIP server - check if server is listening and accessible"
+      end
+
+      if combined_output.include?("Connection refused") || combined_output.include?("No route to host")
+        @logger.warn "SIPp cannot connect to target - check network connectivity and firewall rules"
+      end
+
+      if combined_output.include?("Unexpected message received")
+        @logger.warn "SIPp received unexpected SIP message - possible protocol mismatch"
+      end
+
+      # Look for call statistics - check multiple patterns
+      calls_processed = 0
+      if combined_output =~ /(\d+)\s+calls?\s+processed/i
+        calls_processed = $1.to_i
+      elsif combined_output =~ /Total-time\s+\|\s+(\d+)/
+        calls_processed = $1.to_i
+      end
+
+      if calls_processed == 0
+        @logger.warn "SIPp processed 0 calls - no SIP communication occurred"
+        @logger.info "Possible causes: SIP server not running, wrong port, firewall blocking, or protocol mismatch"
+      else
+        @logger.info "SIPp processed #{calls_processed} call(s)"
+      end
+
+      # Check if SIPp indicates it's waiting
+      if combined_output.include?("Waiting") || combined_output.include?("Paused")
+        @logger.info "SIPp is waiting for server response"
+      end
+
+      # Debug: Log portions of output if debug logging is available
+      if @logger.respond_to?(:debug) && !combined_output.empty?
+        @logger.debug "SIPp combined output (first 500 chars): #{combined_output[0..500]}"
       end
     end
 
